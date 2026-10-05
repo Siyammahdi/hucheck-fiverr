@@ -1,0 +1,218 @@
+[
+  {
+    "id": "off-platform-whatsapp",
+    "phrase": "whatsapp",
+    "severity": "high",
+    "suggestion": "Keep communication on Fiverr. Avoid sharing or requesting WhatsApp contact details."
+  },
+  {
+    "id": "off-platform-telegram",
+    "phrase": "telegram",
+    "severity": "high",
+    "suggestion": "Keep communication on Fiverr instead of moving the conversation to Telegram."
+  },
+  {
+    "id": "off-platform-discord",
+    "phrase": "discord",
+    "severity": "high",
+    "suggestion": "Avoid moving client communication to Discord. Keep project communication on Fiverr."
+  },
+  {
+    "id": "off-platform-skype",
+    "phrase": "skype",
+    "severity": "high",
+    "suggestion": "Keep communication on Fiverr rather than moving the conversation to Skype."
+  },
+  {
+    "id": "off-platform-email",
+    "phrase": "email me",
+    "severity": "high",
+    "suggestion": "Avoid asking the client to communicate by email. Keep communication on Fiverr."
+  },
+  {
+    "id": "off-platform-contact",
+    "phrase": "contact me directly",
+    "severity": "high",
+    "suggestion": "Avoid requesting direct contact outside Fiverr."
+  },
+  {
+    "id": "off-platform-communication",
+    "phrase": "communicate outside Fiverr",
+    "severity": "high",
+    "suggestion": "Keep project communication within Fiverr."
+  },
+  {
+    "id": "off-platform-chat",
+    "phrase": "chat outside Fiverr",
+    "severity": "high",
+    "suggestion": "Keep the conversation on Fiverr."
+  },
+  {
+    "id": "off-platform-move",
+    "phrase": "move to whatsapp",
+    "severity": "high",
+    "suggestion": "Don't move Fiverr communication to WhatsApp."
+  },
+  {
+    "id": "off-platform-telegram-move",
+    "phrase": "move to telegram",
+    "severity": "high",
+    "suggestion": "Don't move Fiverr communication to Telegram."
+  },
+  {
+    "id": "external-payment-paypal",
+    "phrase": "pay me through paypal",
+    "severity": "high",
+    "suggestion": "Keep payment for Fiverr work within Fiverr."
+  },
+  {
+    "id": "external-payment-wise",
+    "phrase": "pay me through wise",
+    "severity": "high",
+    "suggestion": "Avoid requesting payment through external payment services."
+  },
+  {
+    "id": "external-payment-bank",
+    "phrase": "bank transfer",
+    "severity": "high",
+    "suggestion": "Don't request or arrange payment for the Fiverr order through a bank transfer."
+  },
+  {
+    "id": "external-payment-direct",
+    "phrase": "pay me directly",
+    "severity": "high",
+    "suggestion": "Keep payment on Fiverr rather than arranging a direct payment."
+  },
+  {
+    "id": "external-payment-outside",
+    "phrase": "pay outside Fiverr",
+    "severity": "high",
+    "suggestion": "Don't request payment outside Fiverr."
+  },
+  {
+    "id": "external-payment-off-platform",
+    "phrase": "payment outside the platform",
+    "severity": "high",
+    "suggestion": "Keep payment within Fiverr."
+  },
+  {
+    "id": "external-payment-crypto",
+    "phrase": "pay in crypto",
+    "severity": "high",
+    "suggestion": "Don't request cryptocurrency payment for the Fiverr order."
+  },
+  {
+    "id": "external-payment-usdt",
+    "phrase": "pay in usdt",
+    "severity": "high",
+    "suggestion": "Don't request cryptocurrency payment outside Fiverr."
+  },
+  {
+    "id": "fee-avoidance",
+    "phrase": "avoid Fiverr fees",
+    "severity": "high",
+    "suggestion": "Don't suggest moving a transaction outside Fiverr to avoid platform fees."
+  },
+  {
+    "id": "fee-avoidance-commission",
+    "phrase": "avoid the Fiverr commission",
+    "severity": "high",
+    "suggestion": "Don't suggest bypassing Fiverr fees or commissions."
+  },
+  {
+    "id": "fee-avoidance-cheaper",
+    "phrase": "cheaper outside Fiverr",
+    "severity": "high",
+    "suggestion": "Don't suggest completing the transaction outside Fiverr to reduce costs."
+  },
+  {
+    "id": "direct-deal",
+    "phrase": "deal directly",
+    "severity": "high",
+    "suggestion": "Avoid proposing a direct transaction outside Fiverr."
+  },
+  {
+    "id": "external-contact-number",
+    "phrase": "send me your phone number",
+    "severity": "high",
+    "suggestion": "Avoid requesting personal contact information when it isn't necessary for the Fiverr order."
+  },
+  {
+    "id": "personal-number",
+    "phrase": "your phone number",
+    "severity": "medium",
+    "suggestion": "Check whether requesting a phone number is necessary and permitted. Keep communication on Fiverr when possible."
+  },
+  {
+    "id": "personal-email",
+    "phrase": "your email address",
+    "severity": "medium",
+    "suggestion": "Check whether requesting an email address is necessary. Avoid using it to move communication outside Fiverr."
+  },
+  {
+    "id": "credential-password",
+    "phrase": "send me your password",
+    "severity": "high",
+    "suggestion": "Never request a client's password. Use appropriate access or invitation mechanisms instead."
+  },
+  {
+    "id": "credential-login",
+    "phrase": "send me your login",
+    "severity": "high",
+    "suggestion": "Avoid requesting login credentials. Ask for appropriate project access instead."
+  },
+  {
+    "id": "credential-otp",
+    "phrase": "send me the otp",
+    "severity": "high",
+    "suggestion": "Never request a client's OTP or verification code."
+  },
+  {
+    "id": "credential-verification-code",
+    "phrase": "send me the verification code",
+    "severity": "high",
+    "suggestion": "Never request authentication or verification codes."
+  },
+  {
+    "id": "credential-2fa",
+    "phrase": "send me your 2fa code",
+    "severity": "high",
+    "suggestion": "Never request a client's 2FA or authentication code."
+  },
+  {
+    "id": "credential-api-key",
+    "phrase": "send me your api key",
+    "severity": "high",
+    "suggestion": "Avoid requesting API keys directly. Use restricted credentials or appropriate access mechanisms."
+  },
+  {
+    "id": "external-contract",
+    "phrase": "sign this contract directly",
+    "severity": "medium",
+    "suggestion": "Be careful about introducing external contractual arrangements for a Fiverr order."
+  },
+  {
+    "id": "cancel-direct",
+    "phrase": "cancel the order and work directly",
+    "severity": "high",
+    "suggestion": "Be careful about asking a client to cancel a Fiverr order and continue the work elsewhere."
+  },
+  {
+    "id": "continue-outside",
+    "phrase": "continue outside Fiverr",
+    "severity": "high",
+    "suggestion": "Don't suggest continuing Fiverr work outside the platform."
+  },
+  {
+    "id": "future-direct-work",
+    "phrase": "work with me directly",
+    "severity": "high",
+    "suggestion": "Avoid proposing direct work outside Fiverr."
+  },
+  {
+    "id": "future-private-work",
+    "phrase": "work privately",
+    "severity": "high",
+    "suggestion": "Avoid suggesting private/off-platform work related to the Fiverr relationship."
+  }
+]
