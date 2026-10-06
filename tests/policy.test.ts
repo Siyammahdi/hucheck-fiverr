@@ -212,9 +212,41 @@ describe("prohibited content", () => {
     expectSafe([
       "I'll design an adult education course landing page.",
       "I can improve your website traffic with SEO.",
-      "This firearm safety blog needs a new layout.",
     ]);
-    // Mentions crypto, so a pre-existing detector may rate it low; the prohibited-content rules must not fire.
-    expectAtMost(["The crypto dashboard now shows live Bitcoin and Ethereum prices."], "low");
+    // Mentions crypto / a weapon word, so these rate low; they must not escalate on their own.
+    expectAtMost(["The crypto dashboard now shows live Bitcoin and Ethereum prices.", "This firearm safety blog needs a new layout."], "low");
+  });
+
+  it("flags unambiguous prohibited words even on their own", () => {
+    expectAtLeast([
+      ["malware", "high"],
+      ["ransomware", "high"],
+      ["keylogger", "high"],
+      ["phishing", "high"],
+      ["cocaine", "high"],
+      ["meth", "high"],
+      ["lsd", "high"],
+      ["pornography", "high"],
+      ["onlyfans", "high"],
+      ["terrorism", "high"],
+      ["doxxing", "high"],
+    ]);
+  });
+
+  it("treats risky-but-ambiguous words as a low heads-up", () => {
+    expectAtLeast([
+      ["rifle", "low"],
+      ["cannabis", "low"],
+      ["scraping", "low"],
+      ["scam", "low"],
+    ]);
+  });
+
+  it("keeps legitimate security and safety work safe", () => {
+    expectSafe([
+      "I offer malware removal and ransomware recovery.",
+      "I'll build an anti-phishing detection dashboard.",
+      "I can protect your site against malware.",
+    ]);
   });
 });
