@@ -4,6 +4,7 @@ import type { DebugMatch, DebugTrace, MatchSource } from "./debug";
 import { ContextDetector } from "./detectors/context";
 import { FuzzyDetector } from "./detectors/fuzzy";
 import { IntentDetector } from "./detectors/intent";
+import { KeywordDetector } from "./detectors/keywords";
 import { IDENTIFIER_RULES, PatternDetector } from "./detectors/patterns";
 import { SignalDetector } from "./detectors/signals";
 import { TeamRuleDetector } from "./detectors/team";
@@ -28,6 +29,8 @@ export type EngineConfig = {
 /**
  * Order matters: the signal detector skips sentences that earlier rules
  * already flagged, and the intent detector skips anything flagged before it.
+ * The keyword net runs last so its low-risk notes never suppress a stronger
+ * signal or intent hit on the same sentence.
  */
 export const defaultDetectors = (): Detector[] => [
   new PatternDetector(),
@@ -36,6 +39,7 @@ export const defaultDetectors = (): Detector[] => [
   new TeamRuleDetector(),
   new SignalDetector(),
   new IntentDetector(),
+  new KeywordDetector(),
 ];
 
 const LEVEL_FLOOR: Record<RiskLevel, number> = { safe: 0, low: 1, medium: 30, high: 60 };
@@ -68,6 +72,8 @@ function sourceOf(detector: string, ruleId: string): MatchSource {
       return "fuzzy";
     case "intent":
       return "intent";
+    case "keywords":
+      return "keyword";
     case "signals":
       return "contextual signal";
     default:

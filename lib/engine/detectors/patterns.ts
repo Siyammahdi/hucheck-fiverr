@@ -24,6 +24,7 @@ export const SAFE_CHAT = "message me here on Fiverr";
 export const SAFE_CHAT_SENTENCE = "Let's keep our conversation here on Fiverr so everything stays protected.";
 export const SAFE_PAY = "place the order here on Fiverr";
 export const SAFE_PAY_SENTENCE = "Please place the order here on Fiverr. Payment is handled securely by Fiverr.";
+const SAFE_REVIEW = "If you are satisfied with the delivery, feel free to share your experience.";
 const SAFE_FILES_SENTENCE = "I'll attach the files here in the Fiverr chat or include them in the delivery.";
 const SAFE_ACCESS_SENTENCE =
   "Could you add me as a collaborator or create a temporary account with limited access? Please never share passwords or verification codes.";
@@ -51,6 +52,10 @@ const REQUEST =
 /** "what's the password requirement" is a question about a feature, not a request. */
 const NOT_A_SECRET =
   /^\s*(?:requirements?|policy|policies|rules?|fields?|reset|resets|strength|length|format|validation|feature|page|screen|form|manager|hashing|hash|recovery\s+flow|flow|logic|settings?|option|input|step|screen|login\s+page|expiry|expiration|timeout|template|for\s+(?:the\s+)?(?:users?|customers?))\b/;
+
+/** The buyer promising a review ("I'll leave a 5-star review") is not a request for one. */
+const isBuyerPromise = (before: string) =>
+  /\b(?:i'?ll|i\s+will|i'?m\s+going\s+to|i\s+am\s+going\s+to|we'?ll|we\s+will)\s+(?:definitely\s+|happily\s+|gladly\s+|surely\s+)?$/.test(before);
 
 const credentialCheck = (match: string, index: number, text: string) =>
   !NOT_A_SECRET.test(text.slice(index + match.length, index + match.length + 30));
@@ -267,6 +272,10 @@ export const PATTERN_RULES: PatternRule[] = [
       "If you'd like access to the file, you can invite me using my Fiverr username, or I can share it here as an attachment.",
     confidence: 0.6,
     guards: ["negation"],
+    check: (m) =>
+      /gmail/.test(m)
+        ? { severity: "high", detected: "Asking for a Gmail address", message: "Asking for a personal Gmail moves the conversation off Fiverr.", confidence: 0.8 }
+        : true,
   },
   {
     id: "contact.email-me",
@@ -305,6 +314,60 @@ export const PATTERN_RULES: PatternRule[] = [
     saferWording: SAFE_CHAT_SENTENCE,
     confidence: 0.85,
     guards: ["negation", "service", "anchor"],
+  },
+  {
+    id: "contact.text-me",
+    category: "Off-platform contact",
+    severity: "high",
+    detected: "Texting outside Fiverr",
+    pattern:
+      /\b(?:text|txt|sms)\s+(?:me|us|each\s+other)\b|\blet'?s\s+(?:just\s+)?(?:text|sms)\b|\b(?:we|i)(?:\s+(?:can|could|will|should|may)|'ll)\s+(?:just\s+)?(?:text|sms)\b(?!\s+(?:the|this|that|your|it|a|an|in|for|copy|content|is|was|you\s+(?:the|a|an|this|that|your|copy))\b)|\b(?:send|drop|shoot)\s+(?:me|us)\s+(?:a\s+)?(?:text|sms)(?:\s+message)?\b(?!\s+(?:file|document|doc|version|box|field|block|input|layer)\b)/g,
+    message: "\"Let's text\" or \"text me\" means messaging by phone, which takes the conversation off Fiverr.",
+    suggestion: SAFE_CHAT,
+    saferWording: SAFE_CHAT_SENTENCE,
+    confidence: 0.8,
+    guards: ["negation", "anchor"],
+    // People often say "text me" when they mean "message me", so it is a warning rather than a violation.
+    check: (m) => (/^(?:text|txt)\s+(?:me|us)$/.test(m) ? { severity: "medium", confidence: 0.6 } : true),
+  },
+  {
+    id: "contact.on-my-phone",
+    category: "Off-platform contact",
+    severity: "high",
+    detected: "Contact on your phone",
+    pattern:
+      /\b(?:message|msg|text|call|ring|reach|contact|ping|sms|dm|send\s+(?:me|us)\s+(?:a\s+)?(?:message|msg|text))\s+(?:me\s+|us\s+)?(?:on|to|at|via)\s+(?:my|our)\s+(?:cell(?:\s?phone)?|mobile(?:\s+phone)?|phone|personal\s+(?:phone|number|line))\b/g,
+    message: "Asking the buyer to reach you on your phone moves the conversation off Fiverr.",
+    suggestion: SAFE_CHAT,
+    saferWording: SAFE_CHAT_SENTENCE,
+    confidence: 0.85,
+    guards: ["negation"],
+  },
+  {
+    id: "contact.details-on-channel",
+    category: "Off-platform contact",
+    severity: "high",
+    detected: "Details sent to an outside channel",
+    pattern:
+      /\b(?:send|share|give|drop|text|forward|email)\s+(?:me|us)\s+(?:your|ur|the)\s+(?:contact\s+|personal\s+)?(?:details|info|information|number|contact)\s+(?:on|via|over|through|by|to)\s+(?:my\s+|your\s+)?(?:e-?mail|gmail|phone|mobile|cell|text|sms|number)\b/g,
+    message: "\"Send me your details on…\" asks the buyer to continue outside Fiverr.",
+    suggestion: "",
+    saferWording: "Please share any details here in the Fiverr chat so everything stays in one place.",
+    confidence: 0.85,
+    guards: ["negation"],
+  },
+  {
+    id: "contact.send-details",
+    category: "Contact request",
+    severity: "low",
+    detected: "Asking for \"your details\"",
+    pattern:
+      /\b(?:send|give|share|drop|leave)\s+(?:me|us)\s+(?:your|ur)\s+details\b(?=\s*(?:[.!?\n]|$|so\s+(?:i|we)\s+can\s+(?:contact|reach|call|text|add|message)|and\s+(?:i|we)(?:'ll|\s+will)?\s+(?:contact|reach|call|text|add|message)))/g,
+    message: "\"Your details\" can read as contact details. If you mean project details, say so and keep it in the Fiverr chat.",
+    suggestion: "",
+    saferWording: "Please share your project details here in the Fiverr chat.",
+    confidence: 0.5,
+    guards: ["negation", "anchor"],
   },
 
   // ---------- Links ----------
@@ -564,6 +627,19 @@ export const PATTERN_RULES: PatternRule[] = [
     check: (m, index, text) => !/\bfiverr\s+(?:will\s+|would\s+|then\s+)?$/.test(text.slice(Math.max(0, index - 20), index)),
   },
   {
+    id: "pay.cash",
+    category: "Off-platform payment",
+    severity: "high",
+    detected: "Paying in cash",
+    pattern:
+      /\bpay(?:ing|ment)?\s+(?:you\s+|me\s+|us\s+|it\s+)?(?:in\s+|with\s+|by\s+|via\s+)?cash\b(?!\s*(?:(?:flow|back|out|register|and\s+carry)\b|&))|\bcash\s+(?:payment|in\s+hand)\b|\b(?:accept|take|prefer)\s+cash\b/g,
+    message: "Cash payments happen outside the Fiverr order, which is against the rules.",
+    suggestion: SAFE_PAY,
+    saferWording: SAFE_PAY_SENTENCE,
+    confidence: 0.85,
+    guards: ["negation", "service"],
+  },
+  {
     id: "pay.fee-avoid",
     category: "Fee avoidance",
     severity: "high",
@@ -813,6 +889,19 @@ export const PATTERN_RULES: PatternRule[] = [
     guards: ["negation"],
   },
   {
+    id: "off.outside",
+    category: "Off-platform contact",
+    severity: "high",
+    detected: "Connecting outside",
+    pattern:
+      /\b(?:connect|talk|chat|continue|meet|communicate|deal|discuss|speak|move|take\s+(?:this|it)|work\s+together|pay|contact|go)\s+outside\b(?!\s+(?:the\s+|of\s+(?:the\s+)?)?(?:box|scope|brief|hours|office|business\s+hours|working\s+hours|work(?:ing)?\s+hours|city|country|house|home|area)\b)/g,
+    message: "Suggesting to connect or continue \"outside\" means leaving Fiverr.",
+    suggestion: "here on Fiverr",
+    saferWording: SAFE_CHAT_SENTENCE,
+    confidence: 0.85,
+    guards: ["negation"],
+  },
+  {
     id: "off.direct-contact",
     category: "Off-platform contact",
     severity: "high",
@@ -900,14 +989,13 @@ export const PATTERN_RULES: PatternRule[] = [
       /\b(?:leave|give|rate|drop|post|write|need|want|expect|deserve)\b[^.!?\n]{0,30}\b(?:5|five)[\s-]*stars?\b|\b(?:5|five)[\s-]*stars?\s+(?:review|rating|feedback)\b|\b(?:leave|give|write|drop|post)\s+(?:me\s+|us\s+)?(?:a\s+)?(?:good|positive|great|nice|best|perfect)\s+(?:review|rating|feedback)\b|\bplease\s+(?:rate|review)\s+(?:me|us)\b/g,
     message: "Asking for a specific rating or a positive review can count as review manipulation.",
     suggestion: "",
-    saferWording: "If you're happy with the work, I'd appreciate your honest feedback.",
+    saferWording: SAFE_REVIEW,
     confidence: 0.75,
     guards: ["negation"],
     check: (m, index, text) => {
       const before = text.slice(Math.max(0, index - 40), index);
       if (/\bthank(?:s|\s+you)(?:\s+so\s+much|\s+a\s+lot)?\s+for\s+(?:the|your)\s+$/.test(before)) return false;
-      // The buyer promising a review ("I'll leave a 5-star review") is not a request for one.
-      return !/\b(?:i'?ll|i\s+will|i'?m\s+going\s+to|i\s+am\s+going\s+to|we'?ll|we\s+will)\s+(?:definitely\s+|happily\s+|gladly\s+|surely\s+)?$/.test(before);
+      return !isBuyerPromise(before);
     },
   },
   {
@@ -919,7 +1007,7 @@ export const PATTERN_RULES: PatternRule[] = [
       /\b(?:review|rating|feedback)\s+in\s+(?:exchange|return)\b|\b(?:discount|bonus|free\s+\w+|refund|extra\s+\w+)\s+(?:for|in\s+exchange\s+for|if\s+you\s+(?:leave|give))\s+(?:a\s+|me\s+a\s+)?(?:good\s+|positive\s+)?(?:review|rating|5|five)\b/g,
     message: "Offering something in exchange for a review is not allowed.",
     suggestion: "",
-    saferWording: "If you're happy with the work, I'd appreciate your honest feedback.",
+    saferWording: SAFE_REVIEW,
     confidence: 0.9,
   },
   {
@@ -934,8 +1022,204 @@ export const PATTERN_RULES: PatternRule[] = [
     confidence: 0.7,
     guards: ["negation"],
   },
+  {
+    id: "review.swap",
+    category: "Review manipulation",
+    severity: "high",
+    detected: "Review exchange",
+    pattern:
+      /\b(?:exchange|swap|trade)\s+(?:of\s+)?(?:reviews?|ratings?|feedbacks?|stars)\b|\b(?:reviews?|ratings?|feedback)\s+(?:exchange|swap|trade|for\s+(?:a\s+)?(?:reviews?|ratings?))\b|\b(?:buy|order|purchase|review|rate)\s+(?:your|ur)\s+gigs?\b[^.!?\n]{0,50}?\bif\s+(?:you|u)\s+(?:also\s+)?(?:review|rate|buy|order|purchase)\s+(?:mine|my\s+gigs?|me)\b|\bif\s+(?:you|u)\s+(?:also\s+)?(?:review|rate|buy|order|purchase)\s+(?:mine|my\s+gigs?)\b|\byou\s+(?:review|rate)\s+(?:me|mine)\s+(?:and|&)\s+(?:i|i'?ll|i\s+will)\s+(?:review|rate)\s+(?:you|yours)\b|\b(?:leave|give)\s+(?:you\s+)?(?:a\s+)?(?:(?:5|five)[\s-]*stars?|good\s+review|positive\s+review|review)(?:\s+review)?\s+if\s+(?:you|u)\s+(?:leave|give|do)\b|\bif\s+(?:you|u)\s+(?:leave|give)\s+(?:me\s+)?(?:a\s+)?(?:(?:5|five)[\s-]*stars?|good\s+review|positive\s+review|review)\b[^.!?\n]{0,40}\b(?:i'?ll|i\s+will)\s+(?:leave|give|do|buy|order)\b/g,
+    message: "Trading reviews, or buying a gig in return for a review, is review manipulation and can get both accounts banned.",
+    suggestion: "",
+    saferWording: SAFE_REVIEW,
+    confidence: 0.9,
+    guards: ["negation"],
+  },
+  {
+    id: "review.request",
+    category: "Review manipulation",
+    severity: "low",
+    detected: "Asking for a review",
+    pattern:
+      /\b(?:leave|give|write|drop|post|submit)\s+(?:me\s+|us\s+)?(?:a\s+|an\s+|your\s+|some\s+)?(?:quick\s+|short\s+|small\s+|little\s+)?(?:review|rating)\b|\bleave\s+(?:me\s+|us\s+)?(?:a\s+|some\s+|your\s+)?feedback\b(?!\s+(?:on|about|regarding)\s+(?:the|this|my|each|these)\s+(?!order|delivery|gig|job|service))|\b(?:rate|review)\s+(?:me|us)\b/g,
+    message:
+      "Asking for a review in the wrong way can be flagged. Keep it optional and never ask for a specific rating.",
+    suggestion: "",
+    saferWording: SAFE_REVIEW,
+    confidence: 0.55,
+    guards: ["negation", "service"],
+    check: (m, index, text) => {
+      const before = text.slice(Math.max(0, index - 40), index);
+      // "Your customers can leave a review on the product page" is about the buyer's own business.
+      if (/\b(?:customers?|users?|visitors?|shoppers?|buyers|clients|people|members|guests|patients|they)\b[^.!?\n]*$/.test(before)) return false;
+      return !isBuyerPromise(before);
+    },
+  },
+  {
+    id: "review.hint-positive",
+    category: "Review manipulation",
+    severity: "medium",
+    detected: "Hinting at a positive review",
+    pattern:
+      /\b(?:positive|good|great|nice|excellent|perfect|(?:5|five)[\s-]*stars?)\s+(?:reviews?|ratings?|feedback)\s+(?:would|will|could|really|means?|helps?|is\s+(?:very\s+|so\s+)?important|matters?)\b|\bneed\s+(?:a\s+|some\s+|more\s+)?(?:positive|good|great|(?:5|five)[\s-]*stars?)\s+(?:reviews?|ratings?|feedback)\b/g,
+    message: "Hinting that you need a positive review pressures the buyer and can count as review manipulation.",
+    suggestion: "",
+    saferWording: SAFE_REVIEW,
+    confidence: 0.7,
+    guards: ["negation"],
+    check: (m, index, text) => !/\bthank(?:s|\s+you)\b[^.!?\n]*$/.test(text.slice(Math.max(0, index - 40), index)),
+  },
+
+  // ---------- Prohibited services ----------
+  {
+    id: "illicit.hacking",
+    category: "Prohibited service",
+    severity: "high",
+    detected: "Hacking or account takeover",
+    pattern:
+      /\b(?:hack|hacking|break)\s+(?:in)?to\s+(?:(?:my|your|his|her|their|the|an?|someone'?s|somebody'?s)\s+)?(?:[\w']+\s+){0,2}?(?:account|accounts|facebook|instagram|insta|fb|snapchat|snap|gmail|e-?mail|inbox|whatsapp|phone|wi-?fi|server|site|website|database|db|system|network|pc|laptop|computer|device|camera|cctv)\b|\bhack\s+(?:my|your|his|her|their|an?|someone'?s|somebody'?s)\s+\w+|\b(?:gain|get)\s+(?:unauthorized|illegal|secret)\s+access\b|\bcrack(?:ing)?\s+(?:a\s+|the\s+|this\s+|that\s+|his\s+|her\s+|their\s+|my\s+|your\s+|someone'?s\s+)?(?:password|passwords|login|wi-?fi|account|licen[sc]e\s+key|software)\b|\bbrute[\s-]?force\s+(?:a\s+|the\s+|this\s+|his\s+|her\s+|their\s+|someone'?s\s+)?(?:password|login|account)\b/g,
+    message:
+      "Hacking, cracking or breaking into someone's account is illegal and strictly against Fiverr's terms.",
+    suggestion: "",
+    confidence: 0.85,
+    guards: ["negation"],
+    check: (m, index, text) => {
+      const before = text.slice(Math.max(0, index - 45), index);
+      // "recover my hacked account", "protect against hacking", "ethical hacking course".
+      if (/\b(?:recover|recovery|protect|secure|prevent|stop|block|ethical|white[\s-]?hat|against|audit|pen(?:etration)?[\s-]?test\w*|from\s+being|my\s+own)\b[^.!?\n]*$/.test(before)) return false;
+      return true;
+    },
+  },
+  {
+    id: "illicit.malware",
+    category: "Prohibited service",
+    severity: "high",
+    detected: "Malware or phishing",
+    pattern:
+      /\b(?:build|create|make|develop|code|write|need|want|buy|sell|provide|design|program|deploy|get)\s+(?:me\s+)?(?:a\s+|an\s+|some\s+)?(?:[\w']+\s+){0,2}?(?:malware|ransomware|spyware|keylogger|key\s?logger|trojan|rootkit|botnet|rat\b|worm|backdoor|back\s?door|crypto\s?jack\w*|stealer|(?:credential|info|password)\s+stealer)\b(?!\s+(?:scanner|removal|remover|remov\w+|protection|cleaner|detector|detection|defen[sc]e|guard))|\b(?:phishing|phish)\s+(?:page|pages|kit|site|website|email|emails|template|templates|link|links|campaign)\b|\b(?:ddos|dos)\s+(?:attack|tool|script|service)\b/g,
+    message:
+      "Creating malware, phishing pages or attack tools is illegal and strictly against Fiverr's terms.",
+    suggestion: "",
+    confidence: 0.85,
+    guards: ["negation"],
+  },
+  {
+    id: "illicit.fake-engagement",
+    category: "Prohibited service",
+    severity: "high",
+    detected: "Fake engagement",
+    pattern:
+      /\b(?:buy|sell|selling|purchas\w+|order|get\s+me|need|want)\s+(?:\d[\d,.k]*\s+|some\s+|more\s+|cheap\s+|real\s+|active\s+|instant\s+|a\s+few\s+|thousands?\s+of\s+|hundreds?\s+of\s+)*(?:fake\s+|bot\s+)?(?:followers?|subscribers?|likes?|views?|comments?|upvotes?|retweets?|plays?|installs?|watch\s+hours|votes?|clicks?)\b|\b(?:fake|bot|bots?|automated)\s+(?:followers?|subscribers?|likes?|views?|comments?|engagement|accounts?|traffic|reviews?|ratings?|votes?|clicks?)\b/g,
+    message:
+      "Buying or selling fake followers, likes, views or other fake engagement is against Fiverr's terms.",
+    suggestion: "",
+    confidence: 0.8,
+    guards: ["negation"],
+  },
+  {
+    id: "illicit.academic",
+    category: "Prohibited service",
+    severity: "high",
+    detected: "Academic dishonesty",
+    pattern:
+      /\b(?:do|take|sit|write|complete|finish|pass|ace|attend|handle)\s+(?:my|your|his|her|their|the|this|an?|our)\s+(?:[\w']+\s+){0,2}?(?:exam|exams|test|tests|quiz|quizzes|assignment|assignments|homework|coursework|thesis|dissertation|midterm|midterms|final|finals|online\s+(?:class|course|exam)|proctored\s+\w+)\b|\b(?:take|do|sit|write)\s+(?:an?\s+)?(?:exam|test|quiz|class)\s+for\s+(?:me|you|him|her|someone|somebody)\b/g,
+    message:
+      "Taking or completing someone's exam, test or assignment for them is academic dishonesty and against Fiverr's terms.",
+    suggestion: "",
+    confidence: 0.75,
+    guards: ["negation"],
+  },
+  {
+    id: "illicit.account-trade",
+    category: "Prohibited service",
+    severity: "high",
+    detected: "Selling accounts or stolen data",
+    pattern:
+      /\b(?:buy|sell|selling|purchas\w+|trade|trading)\s+(?:[\w']+\s+){0,2}?(?:verified\s+|aged\s+|old\s+|established\s+|ready[\s-]?made\s+)?(?:accounts?|logins?|gift\s+cards?)\b(?!\s+(?:manager|management|settings?|page|section|balance|owner|holder|dashboard|recovery|info))|\b(?:stolen|leaked|hacked|cracked|dumped)\s+(?:accounts?|logins?|data|databases?|credentials?|cards?|cvv|passwords?|emails?)\b/g,
+    message:
+      "Buying or selling accounts, logins or stolen data is illegal and strictly against Fiverr's terms.",
+    suggestion: "",
+    confidence: 0.8,
+    guards: ["negation"],
+  },
+  {
+    id: "illicit.data-harvest",
+    category: "Prohibited service",
+    severity: "medium",
+    detected: "Harvesting personal data",
+    pattern:
+      /\b(?:scrape|scraping|harvest|harvesting|extract|extracting|collect|collecting|mine|mining)\s+(?:[\w']+\s+){0,3}?(?:emails?|email\s+addresses|contacts?|phone\s+numbers?|personal\s+(?:data|info\w*|details|information))\b|\bdox+(?:x?ing)?\b/g,
+    message:
+      "Harvesting people's emails, contacts or personal data (or doxxing) violates privacy rules and Fiverr's terms.",
+    suggestion: "",
+    confidence: 0.65,
+    guards: ["negation"],
+  },
+
+  // ---------- Prohibited content ----------
+  {
+    id: "illicit.adult",
+    category: "Prohibited content",
+    severity: "high",
+    detected: "Adult content",
+    pattern:
+      /\b(?:porn|porno|pornography|pornographic|onlyfans|camgirl|sexting|nudes?)\b|\b(?:adult|sexual|explicit|erotic|nsfw|xxx|18\+)\s+(?:content|video|videos|image|images|photos?|pics?|site|website|chat|model\w*|material|film|films|service)\b|\b(?:nude|naked)\s+(?:photos?|pics?|images?|model\w*)\b|\bescort\s+(?:service|services|site|website|ad|ads)\b/g,
+    message: "Adult or sexual content is not allowed on Fiverr.",
+    suggestion: "",
+    confidence: 0.85,
+    guards: ["negation"],
+  },
+  {
+    id: "illicit.drugs",
+    category: "Prohibited content",
+    severity: "high",
+    detected: "Illegal drugs",
+    pattern:
+      /\b(?:buy|sell|selling|purchas\w+|order|ship|supply|promote|market|advertise)\s+(?:[\w']+\s+){0,3}?(?:cocaine|heroin|meth|methamphetamine|fentanyl|mdma|ecstasy|lsd|opioids?|narcotics?|illegal\s+drugs?|steroids?)\b|\b(?:cocaine|heroin|fentanyl|methamphetamine)\b/g,
+    message: "Promoting or selling illegal drugs is prohibited on Fiverr and against the law.",
+    suggestion: "",
+    confidence: 0.8,
+    guards: ["negation"],
+  },
+  {
+    id: "illicit.weapons",
+    category: "Prohibited content",
+    severity: "high",
+    detected: "Weapons or explosives",
+    pattern:
+      /\b(?:buy|sell|selling|purchas\w+|order|ship|supply|build|make|3d[\s-]?print)\s+(?:[\w']+\s+){0,3}?(?:guns?|firearms?|rifles?|pistols?|ammo|ammunition|bullets?|silencers?|bombs?|explosives?|grenades?|missiles?)\b|\b(?:build|make|assemble)\s+(?:a\s+|an\s+)?(?:bomb|explosive|grenade|pipe\s+bomb)\b/g,
+    message: "Content involving weapons, firearms or explosives is prohibited on Fiverr.",
+    suggestion: "",
+    confidence: 0.8,
+    guards: ["negation"],
+  },
+  {
+    id: "illicit.violence-hate",
+    category: "Prohibited content",
+    severity: "high",
+    detected: "Violence or hate",
+    pattern:
+      /\b(?:terrorism|terrorist\s+(?:content|propaganda|group|material))\b|\b(?:promote|incite|spread)\s+(?:[\w']+\s+){0,2}?(?:violence|hate|hatred|extremism|terrorism)\b|\b(?:hire|find|need)\s+(?:a\s+|an\s+)?(?:hit\s?man|assassin)\b|\bhow\s+to\s+(?:kill|murder|hurt|harm)\s+(?:a\s+|an\s+|my\s+|someone|somebody|people|him|her|them)\b/g,
+    message: "Content promoting violence, hate, harassment or terrorism is prohibited on Fiverr.",
+    suggestion: "",
+    confidence: 0.8,
+    guards: ["negation"],
+  },
 
   // ---------- Claims and tone ----------
+  {
+    id: "claim.financial",
+    category: "Risky claim",
+    severity: "medium",
+    detected: "Unrealistic financial promise",
+    pattern:
+      /\b(?:guarantee[d]?\s+(?:[\w']+\s+){0,2}?(?:profits?|returns?|income|earnings?|roi|gains?|money)|(?:profits?|returns?|income|earnings?)\s+(?:are\s+)?guarantee[d]?)\b|\b(?:double|triple|10x|100x)\s+(?:your\s+)?(?:money|investment|capital|income|profits?|returns?)\b|\brisk[\s-]?free\s+(?:investment|trading|profit|returns?|income)\b|\bguarantee[d]?\s+(?:forex|crypto|binary|trading|investment)\s+(?:profits?|returns?|signals?|wins?)\b/g,
+    message:
+      "Guaranteeing profits or returns is misleading and often tied to financial scams. Avoid promising specific earnings.",
+    suggestion: "",
+    confidence: 0.7,
+    guards: ["negation"],
+  },
   {
     id: "claim.guarantee",
     category: "Risky claim",

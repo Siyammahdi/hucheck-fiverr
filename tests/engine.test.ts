@@ -22,10 +22,26 @@ describe("required examples", () => {
     expect(assess("Please send me your WhatsApp so we can continue there").level).toBe("high");
   });
 
-  it("does not flag generic words by themselves", () => {
-    for (const word of ["email", "payment", "link", "account", "contact", "number", "call", "directly", "cost", "password"]) {
+  it("does not flag truly generic words by themselves", () => {
+    for (const word of ["payment", "link", "account", "contact", "number", "call", "directly", "cost", "password"]) {
       expect(assess(`Please check the ${word} section.`).level).toBe("safe");
     }
+  });
+
+  it("flags a lone off-platform keyword at least as low risk", () => {
+    // Email and phone are the user's examples: a bare mention is a low heads-up.
+    expect(assess("Please check the email section.").level).toBe("low");
+    expect(assess("Do you use phone?").level).toBe("low");
+    // Apps and payment brands are never safe on their own; stronger rules may rate them higher.
+    for (const word of ["WhatsApp", "Telegram", "PayPal", "Payoneer", "crypto"]) {
+      expect(assess(`Please check the ${word} section.`).level, word).not.toBe("safe");
+    }
+  });
+
+  it("keeps the same keyword safe when it is part of the work being built", () => {
+    expect(assess("The phone number field on the signup form is ready.").level).toBe("safe");
+    expect(assess("I'll write the email sequence for your onboarding flow.").level).toBe("safe");
+    expect(assess("I'll set up a Gmail signature for your team.").level).toBe("safe");
   });
 
   it("does not let a bare WhatsApp mention reach high risk, even through a team rule", () => {

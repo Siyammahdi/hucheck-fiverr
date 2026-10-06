@@ -29,6 +29,7 @@ export type MatchSource =
   | "fuzzy"
   | "intent"
   | "contextual signal"
+  | "keyword"
   | "custom";
 
 export type MatchOutcome = "kept" | "lowered" | "dropped by guard" | "lost overlap" | "filtered";
