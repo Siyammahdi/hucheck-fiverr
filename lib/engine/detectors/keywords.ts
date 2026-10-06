@@ -1,205 +1,295 @@
 import { PERSONAL, SERVICE, re } from "../lexicon";
 import { sentenceAt } from "../text";
 import type { Severity } from "../types";
-import { SAFE_CHAT, SAFE_CHAT_SENTENCE, SAFE_PAY, SAFE_PAY_SENTENCE } from "./patterns";
+import { SAFE_CHAT, SAFE_PAY } from "./patterns";
 import type { DetectionContext, Detector, Hit } from "./types";
 
 /**
- * Bare-keyword safety net. A risky word from the keyword dictionary raises a
- * flag even with no other context, so nothing slips through just because it was
- * written on its own.
+ * Comprehensive bare-keyword net built from public/fiverr-risk-keywords.md.
+ * Every word in the dictionary raises a flag, tiered by how risky it is:
  *
- * Severity is tiered on purpose:
- * - Unambiguous prohibited words (malware, cocaine, pornography, terrorism)
- *   flag high, because they are essentially never a legitimate Fiverr message.
- * - Off-platform contact and payment words, and words that are risky but have
- *   real uses (weapons, soft-drug and scraping terms) flag low as a heads-up,
- *   and stronger pattern/context rules escalate them to medium or high.
+ * - high: prohibited or illegal activity (malware, cocaine, pornography…).
+ *   There is no safe rewrite, so the fix is to remove it.
+ * - medium: off-platform contact, payment and credentials.
+ * - low: generic words that are risky in context (review, number, account…).
  *
- * Deliberately excluded: the dictionary's own "high false-positive" words
- * (hack, exploit, gun, adult, review, rating, followers, traffic, account,
- * website, login, password, number, contact, link). On their own these appear
- * constantly in normal work, so they are left to the context-aware rules.
+ * For medium and low words the "fix" is a human-readable disguise: the word is
+ * spaced out ("r-e-v-i-e-w") or the user can pick a synonym, so a person still
+ * reads it normally while an automatic keyword filter does not catch it.
+ *
+ * Guards still apply: a refusal ("I can't share my WhatsApp") drops to low, and
+ * off-platform / payment words inside a feature description ("integrate PayPal")
+ * are skipped unless the sentence is personal ("pay me on PayPal").
  */
 type KeywordGroup = {
   id: string;
   category: string;
   detected: string;
   severity: Severity;
-  confidence: number;
-  /** Regex-source fragments, matched whole-word on normalized text. */
   words: string[];
-  message: string;
-  suggestion: string;
-  saferWording?: string;
-  /** Skip when the word is part of a feature being built (unless it is personal). */
+  /** Offer a spaced-out rewrite as the fix (medium/low). High words are removed. */
+  disguiseFix?: boolean;
   skipService?: boolean;
-  /** Skip when the sentence matches this (e.g. defensive security work). */
   skipIf?: RegExp;
 };
 
-const CONTACT_MSG =
-  "Even on its own, this word often points off Fiverr and can trip the automatic filter. Keep contact details out of the message and talk here on Fiverr.";
-const PAY_MSG =
-  "Even on its own, this word points to an outside payment method and can trip the automatic filter. Keep payments on Fiverr.";
-const PROHIBITED_MSG =
-  "This word refers to activity that is not allowed on Fiverr. Offering or discussing it can get your account banned.";
-const SENSITIVE_MSG =
-  "This word can describe a service Fiverr does not allow. Make sure your offer stays within Fiverr's rules.";
+/** Spaces a word out so a person can read it but a keyword filter cannot. */
+export function disguise(word: string): string {
+  return word
+    .split(/(\s+)/)
+    .map((part) => (/^\s+$/.test(part) ? part : part.split("").join("-")))
+    .join("");
+}
 
-/** Legitimate security work ("malware removal", "protect against ransomware"). */
 const DEFENSIVE =
   /\b(?:remov\w+|protect\w*|prevent\w*|recover\w+|scan\w*|detect\w*|clean\w*|defen[sc]\w+|audit|against|guard|secur\w+|antivirus|anti-?malware|safe(?:ty|guard)?)\b/;
 
+const PROHIBITED = "This word refers to activity Fiverr does not allow. Offering or discussing it can get your account banned.";
+const DISGUISE_MSG = "This word can trip Fiverr's automatic filter. Use a spaced-out version only a person can read, or reword it.";
+
 const GROUPS: KeywordGroup[] = [
-  // ---------- Off-platform contact (low heads-up) ----------
-  {
-    id: "kw.email",
-    category: "Off-platform contact",
-    detected: "Email mentioned",
-    severity: "low",
-    confidence: 0.4,
-    words: ["e-?mails?", "gmail", "outlook", "hotmail", "protonmail", "proton\\s?mail", "icloud\\s+mail"],
-    message: CONTACT_MSG,
-    suggestion: SAFE_CHAT,
-    saferWording: SAFE_CHAT_SENTENCE,
-    skipService: true,
-  },
-  {
-    id: "kw.phone",
-    category: "Off-platform contact",
-    detected: "Phone mentioned",
-    severity: "low",
-    confidence: 0.4,
-    words: ["phone", "telephone"],
-    message: CONTACT_MSG,
-    suggestion: SAFE_CHAT,
-    saferWording: SAFE_CHAT_SENTENCE,
-    skipService: true,
-  },
-  {
-    id: "kw.app",
-    category: "Off-platform contact",
-    detected: "Messaging app mentioned",
-    severity: "low",
-    confidence: 0.4,
-    words: ["whatsapp", "telegram", "skype", "discord", "viber", "wechat", "snapchat", "imessage", "kik"],
-    message: CONTACT_MSG,
-    suggestion: SAFE_CHAT,
-    saferWording: SAFE_CHAT_SENTENCE,
-    skipService: true,
-  },
-  // ---------- Off-platform payment (low heads-up) ----------
-  {
-    id: "kw.pay-brand",
-    category: "Off-platform payment",
-    detected: "Outside payment method mentioned",
-    severity: "low",
-    confidence: 0.4,
-    words: ["paypal", "payoneer", "venmo", "zelle", "cash\\s?app", "skrill", "neteller", "revolut", "moneygram", "western\\s+union"],
-    message: PAY_MSG,
-    suggestion: SAFE_PAY,
-    saferWording: SAFE_PAY_SENTENCE,
-    skipService: true,
-  },
-  {
-    id: "kw.crypto",
-    category: "Off-platform payment",
-    detected: "Cryptocurrency mentioned",
-    severity: "low",
-    confidence: 0.4,
-    words: ["crypto", "cryptocurrency", "bitcoin", "usdt", "ethereum"],
-    message: PAY_MSG,
-    suggestion: SAFE_PAY,
-    saferWording: SAFE_PAY_SENTENCE,
-    skipService: true,
-  },
-  // ---------- Prohibited services and content (high) ----------
+  // ---------- High: prohibited / illegal ----------
   {
     id: "kw.cyber-attack",
     category: "Prohibited service",
     detected: "Hacking or malware term",
     severity: "high",
-    confidence: 0.75,
-    words: ["malware", "ransomware", "spyware", "keylogger", "key\\s?logger", "rootkit", "botnet", "trojan", "phishing", "ddos", "cryptojack\\w*", "carding"],
-    message: PROHIBITED_MSG,
-    suggestion: "",
-    // "malware removal", "protect against ransomware", "phishing detection" are legitimate security work.
     skipIf: DEFENSIVE,
+    words: ["malware", "trojan", "ransomware", "spyware", "keylogger", "key\\s?logger", "phishing", "phish", "payload", "botnet", "rootkit", "backdoor", "brute\\s?force", "ddos", "cryptojack\\w*", "carding"],
   },
   {
     id: "kw.drugs-hard",
     category: "Prohibited content",
     detected: "Illegal drug",
     severity: "high",
-    confidence: 0.75,
-    words: ["cocaine", "heroin", "meth", "methamphetamine", "fentanyl", "mdma", "ecstasy", "lsd", "opioids?", "narcotics?"],
-    message: PROHIBITED_MSG,
-    suggestion: "",
+    words: ["cocaine", "heroin", "meth", "methamphetamine", "fentanyl", "opioids?", "opium", "mdma", "ecstasy", "lsd", "narcotics?"],
   },
   {
-    id: "kw.adult",
+    id: "kw.weapons",
+    category: "Prohibited content",
+    detected: "Weapon or explosive",
+    severity: "medium",
+    words: ["weapons?", "guns?", "firearms?", "rifles?", "pistols?", "ammo", "ammunition", "grenades?", "missiles?", "silencers?", "bullets?", "bombs?", "explosives?"],
+  },
+  {
+    id: "kw.violence",
+    category: "Prohibited content",
+    detected: "Violence term",
+    severity: "high",
+    words: ["murder", "murdering", "manslaughter", "terrorism", "terrorists?"],
+  },
+  {
+    id: "kw.hate",
+    category: "Prohibited content",
+    detected: "Hate or harassment",
+    severity: "high",
+    words: ["racist", "racism", "homophobic", "transphobic", "antisemit\\w*", "supremacy", "extremist", "extremism"],
+  },
+  {
+    id: "kw.adult-hard",
     category: "Prohibited content",
     detected: "Adult content",
     severity: "high",
-    confidence: 0.75,
-    words: ["porn", "porno", "pornography", "pornographic", "onlyfans", "camgirl", "sexting"],
-    message: PROHIBITED_MSG,
-    suggestion: "",
+    words: ["porn", "porno", "pornography", "pornographic", "onlyfans", "camgirl", "sexting", "prostitute", "prostitution", "xxx", "nsfw"],
   },
   {
     id: "kw.illegal",
     category: "Prohibited content",
-    detected: "Illegal or harmful activity",
+    detected: "Illegal marketplace term",
     severity: "high",
-    confidence: 0.75,
-    words: ["terrorism", "terrorists?", "doxx", "doxxing", "dark\\s?web", "dark\\s?net", "counterfeit"],
-    message: PROHIBITED_MSG,
-    suggestion: "",
+    words: ["dark\\s?web", "dark\\s?net", "illicit", "counterfeit", "doxx?", "doxx?ing"],
   },
-  // ---------- Risky but sometimes legitimate (low heads-up) ----------
+
+  // ---------- Medium: off-platform contact, payment, credentials ----------
   {
-    id: "kw.weapons",
-    category: "Prohibited content",
-    detected: "Weapon-related term",
-    severity: "low",
-    confidence: 0.45,
-    words: ["firearms?", "rifles?", "pistols?", "ammo", "ammunition", "silencers?", "grenades?", "missiles?"],
-    message: SENSITIVE_MSG,
-    suggestion: "",
+    id: "kw.app",
+    category: "Off-platform contact",
+    detected: "Messaging app",
+    severity: "medium",
+    disguiseFix: true,
     skipService: true,
+    words: ["whatsapp", "telegram", "skype", "discord", "wechat", "viber", "kik", "snapchat"],
+  },
+  {
+    id: "kw.pay-brand",
+    category: "Off-platform payment",
+    detected: "Outside payment service",
+    severity: "medium",
+    disguiseFix: true,
+    skipService: true,
+    words: ["paypal", "payoneer", "skrill", "cash\\s?app", "venmo", "zelle", "western\\s?union", "moneygram", "neteller", "revolut", "coinbase", "binance"],
+  },
+  {
+    id: "kw.crypto",
+    category: "Off-platform payment",
+    detected: "Cryptocurrency",
+    severity: "low",
+    disguiseFix: true,
+    skipService: true,
+    words: ["crypto", "cryptocurrency", "bitcoin", "btc", "ethereum", "usdt", "usdc"],
+  },
+  {
+    id: "kw.bypass",
+    category: "Off-platform work",
+    detected: "Bypass wording",
+    severity: "medium",
+    disguiseFix: true,
+    skipService: true,
+    words: ["bypass", "offsite", "circumvent"],
+  },
+  {
+    id: "kw.credential",
+    category: "Credential request",
+    detected: "Credential or secret",
+    severity: "medium",
+    disguiseFix: true,
+    skipService: true,
+    words: ["otp", "passcode", "credentials?", "ssn", "passport", "iban", "bank\\s?account"],
+  },
+  {
+    id: "kw.data",
+    category: "Prohibited service",
+    detected: "Data-harvesting term",
+    severity: "medium",
+    disguiseFix: true,
+    words: ["scrape", "scraping", "scraper", "harvest", "harvesting", "spy", "spying", "surveillance"],
+  },
+
+  // ---------- Low: generic / context-sensitive ----------
+  {
+    id: "kw.contact",
+    category: "Off-platform contact",
+    detected: "Contact detail",
+    severity: "low",
+    disguiseFix: true,
+    skipService: true,
+    words: ["e-?mails?", "gmail", "outlook", "hotmail", "yahoo", "phone", "telephone", "mobile", "number", "sms", "contact", "website", "url", "link", "domain", "messenger", "imo", "instagram", "facebook", "linkedin", "twitter", "x\\.com", "call", "text", "signal", "line"],
+  },
+  {
+    id: "kw.pay-generic",
+    category: "Off-platform payment",
+    detected: "Payment wording",
+    severity: "low",
+    disguiseFix: true,
+    skipService: true,
+    words: ["payment", "payments", "pay", "paid", "paying", "money", "cash", "transfer", "bank", "deposit", "funds", "invoice", "wire", "banking", "wallet", "stripe", "wise"],
+  },
+  {
+    id: "kw.bypass-soft",
+    category: "Off-platform work",
+    detected: "Off-platform wording",
+    severity: "low",
+    disguiseFix: true,
+    skipService: true,
+    words: ["offline", "external", "independent", "freelance", "direct", "directly", "private", "privately", "avoid", "skip"],
+  },
+  {
+    id: "kw.personal",
+    category: "Personal information",
+    detected: "Personal information",
+    severity: "low",
+    disguiseFix: true,
+    skipService: true,
+    words: ["password", "login", "username", "user\\s?name", "pin", "identity", "dob", "birthday", "address", "socialsecurity", "id", "license"],
+  },
+  {
+    id: "kw.fraud",
+    category: "Fraud or deception",
+    detected: "Fraud or deception term",
+    severity: "low",
+    disguiseFix: true,
+    skipService: true,
+    words: ["fraud", "fraudulent", "scam", "scammer", "scamming", "forgery", "forged", "forge", "counterfeit", "fake", "faking", "cheat", "cheating", "chargeback", "overpayment", "overpay", "refund", "impersonate", "impersonation", "deception", "deceptive", "manipulate", "manipulation", "verify", "verification"],
+  },
+  {
+    id: "kw.reviews",
+    category: "Review manipulation",
+    detected: "Review or engagement term",
+    severity: "low",
+    disguiseFix: true,
+    skipService: true,
+    words: ["reviews?", "ratings?", "feedback", "followers?", "subscribers?", "engagement", "upvotes?", "retweets?", "likes", "views", "comments", "clicks", "votes", "voting", "traffic", "bots", "automated", "automation", "organic", "rankings?"],
+  },
+  {
+    id: "kw.hacking-soft",
+    category: "Hacking or cybersecurity",
+    detected: "Security or hacking term",
+    severity: "low",
+    disguiseFix: true,
+    skipService: true,
+    words: ["hack", "hacking", "hacker", "exploit", "exploitation", "vulnerability", "bruteforce", "intrusion", "penetration\\s+test\\w*", "unauthorized", "backdoor", "virus", "shell", "reverse", "crack", "cracker", "breach", "steal", "stealing", "theft", "access"],
   },
   {
     id: "kw.drugs-soft",
     category: "Prohibited content",
     detected: "Possible drug reference",
     severity: "low",
-    confidence: 0.4,
-    words: ["cannabis", "marijuana", "weed", "thc", "steroids?", "opium"],
-    message: SENSITIVE_MSG,
-    suggestion: "",
+    disguiseFix: true,
     skipService: true,
+    words: ["cannabis", "marijuana", "weed", "thc", "steroids?", "mushrooms", "psychedelics?", "drugs?", "narcotic"],
   },
   {
-    id: "kw.scraping",
-    category: "Prohibited service",
-    detected: "Data-scraping term",
-    severity: "low",
-    confidence: 0.4,
-    words: ["scrape", "scraping", "scraper", "harvest", "harvesting"],
-    message: SENSITIVE_MSG,
-    suggestion: "",
-  },
-  {
-    id: "kw.fraud",
+    id: "kw.adult-soft",
     category: "Prohibited content",
-    detected: "Possible fraud or deception term",
+    detected: "Possible adult reference",
     severity: "low",
-    confidence: 0.4,
-    words: ["scam", "fraud", "impersonate", "impersonation", "forgery", "forged"],
-    message: SENSITIVE_MSG,
-    suggestion: "",
+    disguiseFix: true,
     skipService: true,
+    words: ["escort", "fetish", "erotic", "nudes?", "naked", "sex", "sexual", "sexy", "explicit", "intimate", "adult", "cam"],
+  },
+  {
+    id: "kw.academic",
+    category: "Academic dishonesty",
+    detected: "Academic term",
+    severity: "low",
+    disguiseFix: true,
+    skipService: true,
+    words: ["coursework", "thesis", "dissertation", "plagiari\\w*", "exams?", "tests?", "assignments?", "homework", "essay", "essaywriting", "interview", "assessment", "certifications?", "certificates?"],
+  },
+  {
+    id: "kw.financial",
+    category: "Risky claim",
+    detected: "Financial-promise term",
+    severity: "low",
+    disguiseFix: true,
+    skipService: true,
+    words: ["guaranteed", "guarantee", "risk\\s?free", "forex", "forextrading", "profits?", "income", "returns", "investments?", "trading", "wealth", "rich", "double", "triple"],
+  },
+  {
+    id: "kw.data-soft",
+    category: "Data collection",
+    detected: "Data-collection term",
+    severity: "low",
+    disguiseFix: true,
+    skipService: true,
+    words: ["crawler", "crawl", "extract", "extraction", "collect", "collection", "database", "leads", "contacts", "profiles", "privacy", "tracking", "tracker"],
+  },
+  {
+    id: "kw.marketplace",
+    category: "Suspicious marketplace term",
+    detected: "Account-trading term",
+    severity: "low",
+    disguiseFix: true,
+    skipService: true,
+    words: ["accounts?", "buy", "sell", "selling", "purchase", "resell", "reselling", "ownership", "owner", "stolen", "leaked", "leaks?", "underground"],
+  },
+  {
+    id: "kw.violence-soft",
+    category: "Prohibited content",
+    detected: "Violence term",
+    severity: "low",
+    disguiseFix: true,
+    skipService: true,
+    words: ["knife", "knives", "sword", "attack", "attacking", "kill", "killing", "assault", "violence", "violent", "terror"],
+  },
+  {
+    id: "kw.hate-soft",
+    category: "Prohibited content",
+    detected: "Harassment term",
+    severity: "low",
+    disguiseFix: true,
+    skipService: true,
+    words: ["hate", "hateful", "harass", "harassment", "bully", "bullying", "threat", "threaten", "threatening", "slur", "sexist", "sexism", "discrimination", "discriminate", "inferior"],
   },
 ];
 
@@ -210,6 +300,8 @@ const compiled = GROUPS.map((g) => ({
 
 const SERVICE_RE = re(SERVICE, "");
 const PERSONAL_RE = re(PERSONAL, "");
+
+const contactFix = (g: KeywordGroup) => g.category.startsWith("Off-platform payment");
 
 export class KeywordDetector implements Detector {
   readonly id = "keywords";
@@ -222,10 +314,12 @@ export class KeywordDetector implements Detector {
         const sentence = sentenceAt(ctx.sentences, m.index) ?? { start: 0, end: ctx.text.length };
         const sentenceText = ctx.text.slice(sentence.start, sentence.end);
         if (group.skipIf?.test(sentenceText)) continue;
-        // For off-platform and sometimes-legitimate words, a feature description
-        // ("integrate PayPal", "scraper for public data") is not a violation,
-        // unless the sentence also makes it personal ("pay me on PayPal").
-        if (group.skipService && SERVICE_RE.test(sentenceText) && !PERSONAL_RE.test(sentenceText)) continue;
+        // skipService only guards medium/high groups from false escalation on
+        // legitimate integrations. Low words are heads-up notes and always flag.
+        if (group.skipService && group.severity !== "low" && SERVICE_RE.test(sentenceText) && !PERSONAL_RE.test(sentenceText)) continue;
+
+        const disguised = disguise(m[0]);
+        const isPay = contactFix(group);
         hits.push({
           ruleId: group.id,
           start: m.index,
@@ -233,10 +327,12 @@ export class KeywordDetector implements Detector {
           category: group.category,
           severity: group.severity,
           detected: group.detected,
-          message: group.message,
-          suggestion: group.suggestion,
-          saferWording: group.saferWording,
-          confidence: group.confidence,
+          message: group.disguiseFix ? DISGUISE_MSG : PROHIBITED,
+          suggestion: group.disguiseFix ? disguised : "",
+          saferWording: group.disguiseFix
+            ? `A person still reads "${disguised}", but the filter can't. Or keep it on Fiverr: ${isPay ? SAFE_PAY : SAFE_CHAT}.`
+            : undefined,
+          confidence: group.severity === "high" ? 0.75 : group.severity === "medium" ? 0.5 : 0.4,
           kind: "rule",
           guards: ["negation"],
         });

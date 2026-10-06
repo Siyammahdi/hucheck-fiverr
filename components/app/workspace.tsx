@@ -70,6 +70,7 @@ export default function Workspace() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const editor = useRef<EditorHandle>(null);
   const flash = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const undoStack = useRef<string[]>([]);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   // Results render at low priority so typing and pasting never wait for them.
@@ -135,20 +136,34 @@ export default function Workspace() {
   }, []);
 
   // Issue offsets belong to `checked`, so fixes are applied to that text.
+  const pushUndo = useEvent(() => {
+    undoStack.current.push(text);
+    if (undoStack.current.length > 50) undoStack.current.shift();
+  });
+
+  const undo = useEvent(() => {
+    const prev = undoStack.current.pop();
+    if (prev === undefined) return false;
+    setText(prev);
+    requestAnimationFrame(() => editor.current?.focus());
+    return true;
+  });
+
   const fixAll = () => {
     if (!issues.length) return;
-    const before = text;
     const count = issues.length;
+    pushUndo();
     setText(applyAll(checked, issues));
     toast.success(`Fixed ${count} issue${count === 1 ? "" : "s"}`, {
-      action: { label: "Undo", onClick: () => setText(before) },
+      description: "Press Ctrl+Z to undo",
+      action: { label: "Undo", onClick: undo },
     });
   };
 
   const fixOne = useEvent((i: Issue) => {
-    const before = text;
+    pushUndo();
     setText(applyIssue(checked, i));
-    toast.success("Fixed", { action: { label: "Undo", onClick: () => setText(before) } });
+    toast.success("Fixed", { description: "Press Ctrl+Z to undo", action: { label: "Undo", onClick: undo } });
   });
 
   const ignoreOnce = useCallback((i: Issue) => {
@@ -226,6 +241,13 @@ export default function Workspace() {
       } else if (mod && e.key === ",") {
         e.preventDefault();
         openSettings();
+      } else if (mod && !e.shiftKey && e.key.toLowerCase() === "z") {
+        // Undo an applied fix. When nothing is on our stack, let the browser
+        // handle its own undo (e.g. typing in the textarea).
+        if (undoStack.current.length) {
+          e.preventDefault();
+          undo();
+        }
       } else if (e.key === "?" && !isTyping(e.target)) {
         e.preventDefault();
         openSettings("shortcuts");
@@ -233,7 +255,7 @@ export default function Workspace() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [startNew, openSettings]);
+  }, [startNew, openSettings, undo]);
 
   const results = (
     <ResultsPanel

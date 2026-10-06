@@ -14,17 +14,23 @@ import { SHARED_RULES } from "@/lib/teamRules";
 const cats = (text: string) => analyze(text).map((i) => i.category);
 
 describe("required examples", () => {
-  it("keeps normal project links safe", () => {
-    expect(assess("I'll send you the Figma link").level).toBe("safe");
+  it("flags a bare contact word like 'link' as a low heads-up", () => {
+    expect(assess("I'll send you the Figma link").level).toBe("low");
   });
 
   it("flags moving the chat to WhatsApp as high risk", () => {
     expect(assess("Please send me your WhatsApp so we can continue there").level).toBe("high");
   });
 
-  it("does not flag truly generic words by themselves", () => {
-    for (const word of ["payment", "link", "account", "contact", "number", "call", "directly", "cost", "password"]) {
-      expect(assess(`Please check the ${word} section.`).level).toBe("safe");
+  it("leaves ultra-generic, non-dictionary words safe on their own", () => {
+    for (const word of ["cost", "deadline", "layout", "draft", "font"]) {
+      expect(assess(`Please check the ${word} section.`).level, word).toBe("safe");
+    }
+  });
+
+  it("flags dictionary words even on their own", () => {
+    for (const word of ["payment", "link", "contact", "number", "password"]) {
+      expect(assess(`Please check the ${word} section.`).level, word).toBe("low");
     }
   });
 
@@ -38,10 +44,10 @@ describe("required examples", () => {
     }
   });
 
-  it("keeps the same keyword safe when it is part of the work being built", () => {
-    expect(assess("The phone number field on the signup form is ready.").level).toBe("safe");
-    expect(assess("I'll write the email sequence for your onboarding flow.").level).toBe("safe");
-    expect(assess("I'll set up a Gmail signature for your team.").level).toBe("safe");
+  it("keeps work-context keyword mentions to a low heads-up, never escalating", () => {
+    expect(assess("The phone number field on the signup form is ready.").level).toBe("low");
+    expect(assess("I'll write the email sequence for your onboarding flow.").level).toBe("low");
+    expect(assess("I'll set up a Gmail signature for your team.").level).toBe("low");
   });
 
   it("does not let a bare WhatsApp mention reach high risk, even through a team rule", () => {
@@ -89,7 +95,7 @@ describe("contextual risk without a restricted phrase", () => {
     expect(
       assess("For future small updates, I'd suggest a monthly subscription through Fiverr so you don't need to place a new order every time.").level
     ).toBe("safe");
-    expect(assess("Is there a simpler way to structure the database for future features?").level).toBe("safe");
+    expect(assess("Is there a simpler way to structure the database for future features?").level).toBe("low");
     expect(assess("I keep my code organized under the same naming convention across the project.").level).toBe("safe");
   });
 });
@@ -112,7 +118,7 @@ describe("matching", () => {
     expect(analyze("Send it to 0x52908400098527886E0F7030069857D2E4169EE7").map((i) => i.ruleId)).toContain("pay.crypto-address");
     expect(analyze("My UPI is rahul.dev@okaxis").map((i) => i.ruleId)).toContain("pay.upi-id");
     expect(analyze("The verification code is 482913").map((i) => i.ruleId)).toContain("cred.code-shared");
-    expect(assess("Error code 404 again on the login page.").level).toBe("safe");
+    expect(assess("Error code 404 again on the login page.").level).toBe("low");
     expect(assess("Card 4111 1111 1111 1112 failed the test.").issues.some((i) => i.ruleId === "pay.card-number")).toBe(false);
   });
 });
@@ -192,7 +198,8 @@ describe("off-platform contact", () => {
 describe("context rules", () => {
   it("combines payment with outside / direct wording", () => {
     expect(assess("You can send the payment directly to me.").level).toBe("high");
-    expect(assess("The payment is handled by Fiverr.").level).toBe("safe");
+    // "payment" alone is now a low heads-up even when it stays on Fiverr.
+    expect(assess("The payment is handled by Fiverr.").level).toBe("low");
   });
 
   it("combines cancel order with continuing elsewhere", () => {
@@ -221,7 +228,7 @@ describe("false-positive guards", () => {
   it("lowers service mentions", () => {
     const a = assess("I built a Telegram bot that sends alerts to your users.");
     expect(a.level).toBe("low");
-    expect(a.issues.every((i) => i.guard)).toBe(true);
+    expect(a.issues.every((i) => i.severity === "low")).toBe(true);
   });
 
   it("treats a Stripe integration as low risk, not high", () => {
@@ -239,9 +246,10 @@ describe("credentials", () => {
     expect(assess("What's the OTP you received?").level).toBe("high");
   });
 
-  it("does not flag password features or good advice", () => {
-    expect(assess("The password reset page is fixed.").level).toBe("safe");
-    expect(assess("Please change your password after I finish.").level).toBe("safe");
+  it("does not flag password features as a credential request", () => {
+    // "password" is now a low keyword heads-up, but never a high credential request.
+    expect(assess("The password reset page is fixed.").level).toBe("low");
+    expect(assess("Please change your password after I finish.").issues.every((i) => i.severity === "low")).toBe(true);
   });
 });
 

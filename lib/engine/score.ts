@@ -2,6 +2,15 @@ import type { Issue, RiskLevel, Severity } from "./types";
 
 const WEIGHT: Record<Severity, number> = { high: 0.6, medium: 0.3, low: 0.08 };
 
+/**
+ * Bare dictionary words flagged by the KeywordDetector are heads-up notes, not
+ * evidence of a violation. They carry a tiny weight and share one bucket so a
+ * message packed with everyday words ("test the login on your account") still
+ * reads as low. Real escalation comes from the phrase/context/intent detectors.
+ */
+const KW_LOW_WEIGHT = 0.03;
+const isKwLow = (i: Issue) => i.severity === "low" && i.ruleId.startsWith("kw.");
+
 export const LEVEL_THRESHOLDS = { medium: 30, high: 60 } as const;
 
 /**
@@ -23,8 +32,11 @@ export function scoreContributions(issues: Issue[]): { issue: Issue; weight: num
   const seen = new Set<string>();
   let safe = 1;
   return ordered.map((issue) => {
-    const weight = seen.has(issue.ruleId) ? WEIGHT[issue.severity] / 2 : WEIGHT[issue.severity];
-    seen.add(issue.ruleId);
+    const kwLow = isKwLow(issue);
+    const key = kwLow ? "kw-low" : issue.ruleId;
+    const base = kwLow ? KW_LOW_WEIGHT : WEIGHT[issue.severity];
+    const weight = seen.has(key) ? base / 2 : base;
+    seen.add(key);
     const points = safe * weight * 100;
     safe *= 1 - weight;
     return { issue, weight, points };

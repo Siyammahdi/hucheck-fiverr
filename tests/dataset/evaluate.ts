@@ -41,6 +41,9 @@ export function classify(expected: RiskLevel[], actual: RiskLevel): Outcome {
   if (expected.includes(actual)) return "pass";
   const expectRisky = expected.every(risky);
   const expectSafe = expected.every((l) => !risky(l));
+  // Generic dictionary words now surface as a low heads-up, so a low result on a
+  // safe-expected message is acceptable; only medium/high is a false positive.
+  if (expectSafe && actual === "low") return "pass";
   if (expectSafe && risky(actual)) return "false-positive";
   if (expectRisky && !risky(actual)) return "false-negative";
   return "severity-mismatch";
